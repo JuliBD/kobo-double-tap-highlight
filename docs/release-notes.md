@@ -1,4 +1,4 @@
-# Kobo Double Tap v0.8.0-beta.3
+# Kobo Double Tap v0.8.0-beta.4
 
 Limited beta candidate: core functions and recovery tests passed on the target
 Libra 2. Broader device/firmware compatibility remains untested.
@@ -8,8 +8,10 @@ inside an existing highlight to remove the whole highlight, including older
 highlights and multiword passages. For note-bearing highlights, visual removal
 was observed but persistence and attached-note handling remain unverified.
 
-Target: **Kobo Libra 2, firmware 4.38.23852, KEPUB only**. Other models,
-firmware and formats are unsupported. No NickelMenu dependency.
+**Only tested on Kobo Libra 2, firmware 4.38.23852, KEPUB.** Other models and
+firmware are untested; back up annotations and test at your own risk. Version
+beta.4 removes the device/firmware whitelist and retains required native-symbol
+checks. EPUB/PDF handling is not implemented. No NickelMenu dependency.
 
 Compared with 0.6.10:
 
@@ -47,3 +49,7 @@ from remaining in NickelMenu. Existing NM entries, preferences, logs and
 annotations remain. Cleanup has isolated filesystem tests and passed the physical uninstall test.
 Reinstallation restored double taps and Japanese long presses. The final
 uninstall comparison found no changes to existing annotations.
+
+Beta.4 allows untested models/firmware to initialize. Missing or unfamiliar
+version metadata emits an advisory warning rather than disabling the plugin.
+Required-symbol checks and the user disable flag still apply.

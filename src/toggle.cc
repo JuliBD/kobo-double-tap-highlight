@@ -260,7 +260,7 @@ extern "C" bool dtp_toggle_process(void *reader, void *tap, const struct dtp_sam
     s.busy = true; s.cleared = false; s.menu.clear();
     s.full_requested = false;
     ++s.operation;
-    s.trace_clock.start(); s.trace_count = 0; s.trace("double-tap begin version=0.8.0-beta.3");
+    s.trace_clock.start(); s.trace_count = 0; s.trace("double-tap begin version=0.8.0-beta.4");
     QPointer<QObject> selection = s.selection;
     const bool selected = reinterpret_cast<bool (*)(void *, void *)>(dtpt_start)(selection.data(), tap);
     if (selected && selection) {

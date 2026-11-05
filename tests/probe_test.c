@@ -3,6 +3,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#define DTP_DEVICE_VERSION_FILE "build/probe-device-version"
+#define DTP_DISABLE_FILE "build/probe-disable"
 #include "../src/probe.c"
 
 struct tap { int state; bool doubled, held, pressed; };
@@ -17,7 +19,8 @@ void *dtpa_get_id, *dtpa_save, *dtpa_delete;
 void *dtpa_is_highlight, *dtpa_is_note, *dtpa_annotation_raw, *dtpa_text_raw;
 void *dtpa_content_id, *dtpa_start_path, *dtpa_end_path;
 void *dtpa_start_child, *dtpa_end_child, *dtpa_start_offset, *dtpa_end_offset;
-void dtp_annotations_enable(bool enable) { (void)enable; }
+static bool annotations_enabled, toggle_enabled;
+void dtp_annotations_enable(bool enable) { annotations_enabled=enable; }
 void dtp_annotation_setup(void *p) { (void)p; }
 void *dtp_annotation_create_item(void *p, void *v, const void *t) { (void)p; (void)v; (void)t; return NULL; }
 const void *dtp_annotation_bookmark_id(const void *p) { return p; }
@@ -43,7 +46,7 @@ bool dtp_longpress_start(void *c, void *t) { (void)c; (void)t; return false; }
 bool dtp_uninstall_cleanup(void) { return true; }
 static bool toggle_consume;
 static unsigned toggle_calls;
-void dtp_toggle_enable(bool enable) { (void)enable; }
+void dtp_toggle_enable(bool enable) { toggle_enabled=enable; }
 bool dtp_toggle_process(void *r, void *t, const struct dtp_sample *s) {
     (void)r; (void)t; (void)s; ++toggle_calls; return toggle_consume;
 }
@@ -86,11 +89,36 @@ int main(void) {
     tap_is_held = held;
     tap_is_pressed = pressed;
     tap_position = position;
-    assert(supported_device("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL "\r\n"));
-    assert(!supported_device("fake,4.1.15,4.38.23684,4.1.15,4.1.15," DTP_MODEL));
-    assert(!supported_device("fake,4.1.15,4.38.23852,4.1.15,4.1.15,other"));
-    assert(!supported_device("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL ",extra"));
-    assert(!supported_device(""));
+    assert(tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL "\r\n"));
+    assert(!tested_configuration("fake,4.1.15,4.38.23684,4.1.15,4.1.15," DTP_MODEL));
+    assert(!tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15,other"));
+    assert(!tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL ",extra"));
+    assert(!tested_configuration(""));
+
+    /* Untested or unreadable metadata must not block initialization. */
+    remove(DTP_DEVICE_VERSION_FILE); remove(DTP_DISABLE_FILE);
+    const char *configurations[] = {
+        "fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL,
+        "fake,4.1.15,4.38.23684,4.1.15,4.1.15," DTP_MODEL,
+        "fake,4.1.15,4.38.23852,4.1.15,4.1.15,other",
+        "unrecognized metadata"
+    };
+    for (unsigned i=0; i<sizeof(configurations)/sizeof(configurations[0]); ++i) {
+        FILE *fixture=fopen(DTP_DEVICE_VERSION_FILE,"w"); assert(fixture);
+        assert(fputs(configurations[i],fixture)>=0); assert(fclose(fixture)==0);
+        assert(probe_init()==0 && enabled && annotations_enabled && toggle_enabled);
+        assert(strstr(last_kind,i==0 ? "tested-configuration=yes" : "tested-configuration=no"));
+    }
+    remove(DTP_DEVICE_VERSION_FILE);
+    assert(probe_init()==0 && enabled && annotations_enabled && toggle_enabled);
+    assert(strstr(last_kind,"tested-configuration=no"));
+    tap_is_held=NULL;
+    assert(probe_init()==0 && !enabled && !annotations_enabled && !toggle_enabled);
+    tap_is_held=held;
+    FILE *disable=fopen(DTP_DISABLE_FILE,"w"); assert(disable); assert(fclose(disable)==0);
+    assert(probe_init()==0 && !enabled && !annotations_enabled && !toggle_enabled);
+    assert(remove(DTP_DISABLE_FILE)==0);
+    reported=0; enabled=false;
 
     dtp_process_tap(&reader, &t);
     assert(forwarded == 1 && reported == 0); /* disabled */
@@ -131,6 +159,6 @@ int main(void) {
     dtp_process_tap(&reader, &t);
     assert(toggle_calls == before_toggle_calls + 1 && forwarded == 112 && reported == 96);
     /* Behavior keeps running after the bounded diagnostic budget is exhausted. */
-    puts("PASS: firmware/model gates, all gesture states, overlapping flags, clock failure, forwarding, null tap, log budget");
+    puts("PASS: untested/missing metadata allowed, required-symbol and disable guards, all gesture states, overlapping flags, clock failure, forwarding, null tap, log budget");
     return 0;
 }

@@ -4,7 +4,7 @@ override LIBRARY := src/libkobodoubletapprobe.so
 override SOURCES += src/probe.c src/report.c src/probe_clock.c src/double_tap.c src/uninstall.c
 override SOURCES += src/annotations.cc src/toggle.cc src/japanese.cc src/rendering.cc src/settings.cc
 override PKGCONF += Qt5Widgets
-override VERSION := prototype-0.8.0-beta.3
+override VERSION := prototype-0.8.0-beta.4
 override LDFLAGS += -lrt
 SUDACHI ?= 0
 override CPPFLAGS += -DDTP_USE_SUDACHI=$(SUDACHI)

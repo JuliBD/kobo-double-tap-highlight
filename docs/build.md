@@ -56,4 +56,4 @@ files, preservation of preferences/other entries, idempotence and error handling
 The integration tests exercise production adapters, not a complete Nickel
 emulator. Native signatures were inspected separately against the target
 firmware; symbol presence alone does not verify signatures or hardware behavior.
-See [physical release gates](release-checklist.md).
+See [release notes](release-notes.md) for the tested setup and remaining limitations.

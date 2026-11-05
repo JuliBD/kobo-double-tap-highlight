@@ -7,3 +7,7 @@
 *.js text eol=lf
 *.tgz binary
 *.png binary
+
+*.mp4 binary
+
+*.gif binary

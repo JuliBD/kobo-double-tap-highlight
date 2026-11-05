@@ -1,4 +1,4 @@
-/* Reader observer and native KEPUB double-tap toggle for the pinned firmware. */
+/* Reader observer and native KEPUB toggle; untested configurations may run. */
 #include <NickelHook.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -21,6 +21,12 @@
 
 #define DTP_VERSION "4.38.23852"
 #define DTP_MODEL "00000000-0000-0000-0000-000000000388"
+#ifndef DTP_DEVICE_VERSION_FILE
+#define DTP_DEVICE_VERSION_FILE "/mnt/onboard/.kobo/version"
+#endif
+#ifndef DTP_DISABLE_FILE
+#define DTP_DISABLE_FILE "/mnt/onboard/doubletap_disable"
+#endif
 #define DTP_REPORT "/mnt/onboard/.kobo/doubletap-prototype.log"
 #define DTP_EVENT_LIMIT 96
 
@@ -36,7 +42,7 @@ static unsigned records;
 static struct dtp_recognizer recognizer;
 
 /* A serial number is present in field zero; never log the input line. */
-static bool supported_device(const char *line) {
+static bool tested_configuration(const char *line) {
     const char *field = line;
     unsigned index = 0;
     bool firmware = false, model = false;
@@ -84,7 +90,7 @@ void dtp_process_tap(void *reader, void *tap) {
         }
         if (consumed) return;
     }
-    /* Unconsumed taps, including unsupported/disabled states, forward once. */
+    /* Unconsumed taps, including inactive/disabled states, forward once. */
     if (original_process_tap)
         original_process_tap(reader, tap);
 }
@@ -100,29 +106,29 @@ static int probe_init(void) {
         nh_log("probe inactive: required symbols unavailable");
         return 0;
     }
-    if (!access("/mnt/onboard/doubletap_disable", F_OK)) {
+    if (!access(DTP_DISABLE_FILE, F_OK)) {
         nh_log("probe disabled by flag (restart required after changing flag)");
         return 0;
     }
-    file = fopen("/mnt/onboard/.kobo/version", "r");
-    if (!file) {
-        nh_log("probe inactive: cannot read device version");
-        return 0;
+    bool tested = false;
+    file = fopen(DTP_DEVICE_VERSION_FILE, "r");
+    if (file) {
+        if (fgets(line, sizeof(line), file)) tested = tested_configuration(line);
+        fclose(file);
     }
-    const bool read_ok = fgets(line, sizeof(line), file) != NULL;
-    fclose(file);
-    if (!read_ok || !supported_device(line)) {
-        nh_log("probe inactive: unsupported device or firmware");
-        return 0;
-    }
+    // Version/model information is advisory, never an activation whitelist.
+    // Do not log the raw version line: it contains the device serial number.
+    if (!tested)
+        nh_log("WARNING: untested device/firmware; only Libra 2 / " DTP_VERSION " has been tested; attempting initialization");
     enabled = true;
     dtp_annotations_enable(true);
     dtp_toggle_enable(true);
     records = 0;
     dtp_reset(&recognizer);
     nh_log("native gesture observer enabled; at most %u callbacks", DTP_EVENT_LIMIT);
-    dtp_append_report(DTP_REPORT,
-                      "session-start version=" NH_VERSION " firmware=" DTP_VERSION " budget=96");
+    dtp_append_report(DTP_REPORT, tested ?
+                      "session-start version=" NH_VERSION " tested-configuration=yes budget=96" :
+                      "session-start version=" NH_VERSION " tested-configuration=no budget=96");
     return 0;
 }
 
