@@ -9,7 +9,7 @@ characters. Japanese long presses also select words by default, with an
 optional NickelMenu toggle to restore Kobo's original long-press selection.
 English uses Kobo's native word selection.
 
-## English demo
+## Demo
 
 Double-tap to add a highlight, then double-tap it again to remove it.
 Click the animated preview to open the video.
@@ -55,32 +55,34 @@ You can still highlight and remove highlights using Kobo's normal controls.
 highlights has not been verified; do not assume an attached note will be
 preserved.
 
-## Japanese long-press setting
+## Optional NickelMenu settings
 
-Japanese word selection for long presses is **On by default**. The plugin works
-without NickelMenu; install the optional controls if you want to switch this
-setting from a menu.
-
-With NickelMenu already installed:
+Both settings are **On by default**. With NickelMenu already installed:
 
 1. Download `NickelMenu-settings.zip` from the same release.
 2. Extract it to the **Kobo drive root**, keeping its `.adds` folder structure.
 3. Safely eject the Kobo.
-4. Open NickelMenu from Home or the reader menu and choose
-   **Japanese long-press words** to toggle the setting.
+4. Open NickelMenu from Home or the reader menu and choose a setting:
 
-A message confirms **On** or **Off**. The change applies to your next long
-press, persists across restarts and does not change double-tap word selection.
-Existing NickelMenu entries are preserved.
+| Setting | What it does |
+| --- | --- |
+| **Japanese long-press words** | Selects Japanese words instead of individual characters on a long press. Applies to the next long press. |
+| **Highlight rendering fix** | Corrects highlights that shade too much text at the start of a text container. Applies to all highlights, including older passages and highlights with notes. Reopen your book to redraw existing highlights. |
 
-Without NickelMenu, the setting can be changed in `.kobo/doubletap.conf`:
+A message confirms **On** or **Off**. Both choices persist across restarts and
+can be changed independently. The rendering option changes display only;
+your saved highlights and notes are not rewritten. Existing NickelMenu entries
+are preserved.
+
+Without NickelMenu, edit `.kobo/doubletap.conf`:
 
 ```ini
-japanese_long_press_words=0
+japanese_long_press_words=1
+highlight_rendering_fix=1
 ```
 
-Use `0` for native long-press selection or `1` for Japanese word selection.
-If the file is absent, word selection is enabled.
+Use `0` to disable a setting or `1` to enable it. Missing settings default to On.
+The long-press setting does not change double-tap word selection.
 
 ## Disable or uninstall
 
@@ -104,8 +106,6 @@ steps if you want the plugin back.
 
 - Japanese segmentation may split compounds or expressions into shorter pieces.
   It selects words rather than recognizing whole phrases.
-- New highlights are limited by a 4096-entry tracking file. Removing existing
-  highlights does not require a tracking entry.
 - Other Kobo models, firmware versions and combinations of modifications need
   community testing. The plugin may stay inactive if required Kobo functions
   are unavailable.

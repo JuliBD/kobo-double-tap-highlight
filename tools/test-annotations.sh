@@ -12,7 +12,6 @@ python3 tools/embed-japanese.py
 moc tests/annotation_qt_test.h -o build/native-test/annotation-qt-test.moc
 arm-nickel-linux-gnueabihf-g++ -std=gnu++11 -O2 -fPIC -march=armv7-a -mtune=cortex-a8 -mfpu=neon -mfloat-abi=hard -mthumb -Wall -Wextra -Werror \
     -Ivendor/NickelHook -Ibuild/native-test \
-    '-DDTP_ANNOTATION_REGISTRY="build/native-test/registry"' \
     '-DDTP_ANNOTATION_REPORT="build/native-test/report"' \
     '-DDTP_SETTINGS_FILE="build/native-test/settings"' \
     -DDTP_TEST_MANUAL_MENU -DDTP_USE_SUDACHI=$backend \

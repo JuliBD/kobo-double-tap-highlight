@@ -7,32 +7,27 @@ static void run_annotation_failure_cases() {
     SelectionMenuView view;
     SelectionMenuController menu(&view, &bookmark);
     QFile file(registry);
-    auto populate = [&](unsigned count) {
-        assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        file.write("DTP-TEST-HIGHLIGHTS-2\n");
-        for (unsigned i = 0; i < count; ++i) {
-            const QString id = QStringLiteral("10000000-0000-4000-8000-%1").arg(i,12,16,QLatin1Char('0'));
-            file.write(id.toLatin1() + '\t' + QByteArray(64,'a') + '\n');
-        }
-        file.close(); bookmark.id.clear(); menu.id.clear();
-    };
-    /* Reproduce the old 16-entry failure threshold: it must now work normally. */
-    populate(16);
-    unsigned before_saves = saves;
+    // The old 4096-entry metadata limit must no longer affect native saves.
+    assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("DTP-TEST-HIGHLIGHTS-2\n");
+    for (unsigned i=0;i<5000;++i) {
+        const QString id=QStringLiteral("10000000-0000-4000-8000-%1").arg(i,12,16,QLatin1Char('0'));
+        file.write(id.toLatin1()+'\t'+QByteArray(64,'a')+'\n');
+    }
+    file.close();
+    assert(file.open(QIODevice::ReadOnly));const QByteArray original=file.readAll();file.close();
+    const unsigned initial_saves=saves;
     assert(dtp_annotation_auto_action(&menu,"testword",&book));
-    assert(saves == before_saves + 1);
-    assert(file.open(QIODevice::ReadOnly));
-    assert(file.readAll().split('\n').size() == 19); file.close();
-
-    /* At the real capacity, refuse before the native signal can mark the page. */
-    populate(DTP_REGISTRY_LIMIT);
-    rendered_visual = false;
-    unsigned attempts = highlight_attempts;
-    before_saves = saves;
-    assert(!dtp_annotation_auto_action(&menu,"testword",&book));
-    assert(highlight_attempts == attempts && saves == before_saves && !rendered_visual);
-
-    QFile::remove(registry); bookmark.id.clear(); menu.id.clear();
+    assert(saves==initial_saves+1);
+    assert(file.open(QIODevice::ReadOnly));assert(file.readAll()==original);file.close();
+    QFile::remove(registry);
+    bookmark.id.clear();menu.id.clear();
+    assert(dtp_annotation_auto_action(&menu,"testword",&book));
+    assert(saves==initial_saves+2 && !QFile::exists(registry));
+    bookmark.id.clear();menu.id.clear();
+    unsigned attempts=highlight_attempts;
+    unsigned before_saves=saves;
+    rendered_visual=false;
     /* Sentence punctuation, whitespace, and long Japanese tokens never dispatch. */
     const QByteArray invalid_words[] = {QStringLiteral("これは文章です。").toUtf8(), QByteArray("two words"),
                                       QString(25,QChar(0x9ad8)).toUtf8(), QByteArray("word!")};
@@ -56,7 +51,7 @@ static void run_annotation_failure_cases() {
     assert(saves == before_saves + 1 && !rendered_visual && visual_cleanups == cleaned + 2 && deletes == before_deletes);
     save_ok = true;
     QFile::remove(registry);
-    std::puts("PASS: old 16-entry regression, 4096-entry preflight, sentence rejection before native display change, native text/save-failure visual rollback without annotation deletion");
+    std::puts("PASS: native save works with 5000 legacy entries and without a metadata file, sentence rejection before native display change, native text/save-failure visual rollback without annotation deletion");
 }
 
 // Deletion must validate a fresh menu snapshot again at the manager boundary.

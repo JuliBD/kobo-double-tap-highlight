@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $workspace=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $root=(Resolve-Path -LiteralPath $DeviceRoot).Path
 if (!(Test-Path -LiteralPath (Join-Path $root '.adds/nm') -PathType Container)) {
-    Write-Output 'NickelMenu is absent; Japanese long-press words defaults to On.'
+    Write-Output 'NickelMenu is absent; both plugin settings default to On.'
     return
 }
 # Called only after stage-device's fresh backup. Existing NM config is untouched.
@@ -21,4 +21,4 @@ foreach ($source in $files.Keys) {
     if ((Get-FileHash -LiteralPath $pending).Hash -ne (Get-FileHash -LiteralPath $origin).Hash) { throw 'NickelMenu copy checksum differs' }
     Move-Item -LiteralPath $pending -Destination $target -Force
 }
-Write-Output 'Verified Japanese long-press toggle installed in NickelMenu (Home and reader).'
+Write-Output 'Verified long-press and rendering toggles installed in NickelMenu (Home and reader).'

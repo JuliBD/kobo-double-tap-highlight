@@ -14,11 +14,23 @@
 
 extern "C" { void *dtpl_is_held; }
 
-extern "C" bool dtp_settings_longpress(void) {
+namespace {
+bool read_setting(const QByteArray &key) {
     QFile file(QLatin1String(DTP_SETTINGS_FILE));
-    if (!file.open(QIODevice::ReadOnly) || file.size()>128) return true;
-    return file.readAll().trimmed() != "japanese_long_press_words=0";
+    if (!file.open(QIODevice::ReadOnly) || file.size()>4096) return true;
+    bool value=true;
+    while (!file.atEnd()) {
+        const QByteArray line=file.readLine().trimmed();
+        const int equal=line.indexOf('=');
+        if (equal<0 || line.left(equal).trimmed()!=key) continue;
+        const QByteArray setting=line.mid(equal+1).trimmed();
+        if (setting=="0" || setting=="1") value=setting=="1";
+    }
+    return value;
 }
+}
+extern "C" bool dtp_settings_longpress(void) { return read_setting("japanese_long_press_words"); }
+extern "C" bool dtp_settings_rendering(void) { return read_setting("highlight_rendering_fix"); }
 
 extern "C" __attribute__((visibility("default"))) bool dtp_longpress_start(void *controller, void *tap) {
     // Verified native ABI: bool startSelection(TapGesture*). Always forward once.

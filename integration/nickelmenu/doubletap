@@ -1,3 +1,5 @@
 # Optional NickelMenu controls. The plugin defaults to Japanese long-press words On.
 menu_item :main   :Japanese long-press words :cmd_output :1500:/bin/sh /mnt/onboard/.adds/doubletap/toggle-japanese-longpress.sh
 menu_item :reader :Japanese long-press words :cmd_output :1500:/bin/sh /mnt/onboard/.adds/doubletap/toggle-japanese-longpress.sh
+menu_item :main   :Highlight rendering fix :cmd_output :1500:/bin/sh /mnt/onboard/.adds/doubletap/toggle-japanese-longpress.sh rendering
+menu_item :reader :Highlight rendering fix :cmd_output :1500:/bin/sh /mnt/onboard/.adds/doubletap/toggle-japanese-longpress.sh rendering

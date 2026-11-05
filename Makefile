@@ -4,7 +4,7 @@ override LIBRARY := src/libkobodoubletapprobe.so
 override SOURCES += src/probe.c src/report.c src/probe_clock.c src/double_tap.c src/uninstall.c
 override SOURCES += src/annotations.cc src/toggle.cc src/japanese.cc src/rendering.cc src/settings.cc
 override PKGCONF += Qt5Widgets
-override VERSION := prototype-0.8.0-beta.4
+override VERSION := prototype-0.8.0-beta.5
 override LDFLAGS += -lrt
 SUDACHI ?= 0
 override CPPFLAGS += -DDTP_USE_SUDACHI=$(SUDACHI)
@@ -45,7 +45,7 @@ build/japanese_bundle.h: tools/embed-japanese.py src/japanese-selection.js vendo
 # Compiler definitions (including NH_VERSION) change when this file changes.
 $(OBJECTS_C) $(OBJECTS_CXX) $(OBJECTS_CXX1) $(OBJECTS_MOC): Makefile
 
-src/settings.o src/probe.o src/annotations.o: src/settings.h
+src/settings.o src/probe.o src/rendering.o: src/settings.h
 src/settings.o: src/toggle.h src/japanese.h src/annotations.h
 
 src/probe.o src/uninstall.o: src/uninstall.h

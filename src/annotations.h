@@ -9,7 +9,6 @@ extern void *dtpa_get_id, *dtpa_save, *dtpa_delete;
 extern void *dtpa_is_highlight, *dtpa_is_note, *dtpa_annotation_raw, *dtpa_text_raw;
 extern void *dtpa_content_id, *dtpa_start_path, *dtpa_end_path;
 extern void *dtpa_start_child, *dtpa_end_child, *dtpa_start_offset, *dtpa_end_offset;
-enum { DTP_REGISTRY_LIMIT = 4096 };
 void dtp_annotations_enable(bool enable);
 void dtp_annotation_setup(void *controller);
 void *dtp_annotation_create_item(void *controller, void *parent, const void *label);
@@ -19,7 +18,6 @@ void dtp_annotation_delete(void *bookmark, const void *device);
 bool dtp_annotation_has_current(void *controller);
 bool dtp_annotation_auto_action(void *controller, const char *expected_utf8, void *book);
 bool dtp_annotations_ready(void);
-bool dtp_annotation_owned(const void *bookmark);
 #ifdef DTP_TEST_MANUAL_MENU
 void dtp_annotation_test_menu_enable(bool enable);
 #endif

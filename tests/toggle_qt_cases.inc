@@ -415,7 +415,7 @@ static void run_longpress_cases() {
     bookmark.text=QStringLiteral("高校").toUtf8();
     const QString database(QStringLiteral("test-only"));
     assert(dtp_annotation_save(&bookmark,&database));
-    assert(dtp_annotation_owned(&bookmark)); // Manual words retain bounded rendering on reopen.
+    assert(!QFile::exists(QStringLiteral("build/native-test/registry")));
     selectable=false;
     assert(!dtp_longpress_start(&selection,tap));
     selectable=true; bookmark.text=QStringLiteral("高").toUtf8();

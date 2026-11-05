@@ -4,6 +4,7 @@
 #include "../src/toggle.h"
 #include "../src/japanese.h"
 #include "../src/rendering.h"
+#include "../src/settings.h"
 #include <QApplication>
 #include <QFile>
 #include <QMetaObject>
@@ -150,15 +151,10 @@ int main(int argc, char **argv) {
     tap(action(view,"Prototype: save selection"));
     assert(saves == 1); /* One dispatch per menu, even if tapped twice. */
     QFile file(registry);
-    assert(file.open(QIODevice::ReadOnly));
-    QByteArray data = file.readAll(); file.close();
-    assert(data.contains(bookmark.id.toLatin1()));
-    assert(!data.contains("testword") && !data.contains("test-book"));
-    /* Independent Python/SQLite fingerprint vector, not a round-trip-only test. */
-    assert(data.startsWith("DTP-TEST-HIGHLIGHTS-2\n"));
-    assert(data.contains("99381cf0b05db0751a5f5c00fd10a08af023990e5892226f9444095207c7479f"));
+    assert(!QFile::exists(registry));
     menu.id = bookmark.id;
     dtp_annotation_setup(&menu);
+    assert(menu.property("dtp_hash").toByteArray()=="99381cf0b05db0751a5f5c00fd10a08af023990e5892226f9444095207c7479f");
     assert(!action(view,"Prototype: save selection"));
     tap(action(view,"Prototype: remove test highlight"));
     assert(deletes == 1 && bookmark.deleted);
@@ -174,22 +170,22 @@ int main(int argc, char **argv) {
     bookmark.noteType = false;
     bookmark.endOffset = 40;
     dtp_annotation_setup(&menu);
-    assert(!action(view,"Prototype: remove test highlight"));
+    assert(action(view,"Prototype: remove test highlight"));
     bookmark.endOffset = 8;
 
     /* Raw getters are QByteArray references, including multibyte UTF-8. */
     bookmark.text = QByteArray::fromHex("e697a5e69cace8aa9e");
     dtp_annotation_setup(&menu);
-    assert(!action(view,"Prototype: remove test highlight"));
+    assert(action(view,"Prototype: remove test highlight"));
     bookmark.text = QByteArray("testword");
     bookmark.text += QByteArray(" expanded");
     dtp_annotation_setup(&menu);
-    assert(!action(view,"Prototype: remove test highlight"));
+    assert(action(view,"Prototype: remove test highlight"));
     bookmark.text = QByteArray("testword");
     const QString owned_id = bookmark.id;
     bookmark.id = menu.id = QStringLiteral("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     dtp_annotation_setup(&menu);
-    assert(!action(view,"Prototype: remove test highlight"));
+    assert(action(view,"Prototype: remove test highlight"));
     bookmark.id = menu.id = owned_id;
     dtp_annotation_setup(&menu);
     bookmark.note = QByteArray("added after opening the menu");
@@ -202,17 +198,11 @@ int main(int argc, char **argv) {
     assert(deletes == 1);
     bookmark.endOffset = 8;
 
-    file.setFileName(registry);
-    assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    QByteArray legacy = data;
-    legacy.replace("DTP-TEST-HIGHLIGHTS-2", "DTP-TEST-HIGHLIGHTS-1");
-    file.write(legacy); file.close();
-    dtp_annotation_setup(&menu);
-    assert(!action(view,"Prototype: remove test highlight"));
+    // A legacy metadata file must be irrelevant and left untouched.
     assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
     file.write("malformed registry\n"); file.close();
     dtp_annotation_setup(&menu);
-    assert(!action(view,"Prototype: remove test highlight"));
+    assert(action(view,"Prototype: remove test highlight"));
 
     /* A failed native save is returned unchanged and never registered. */
     save_ok = false;
@@ -245,12 +235,10 @@ int main(int argc, char **argv) {
     SelectionMenuController utf8_menu(&utf8_view, &utf8);
     dtp_annotation_setup(&utf8_menu);
     tap(action(utf8_view,"Prototype: save selection"));
-    assert(file.open(QIODevice::ReadOnly));
-    data = file.readAll(); file.close();
-    assert(data.contains("a7cf4d7480a93336252886d377d9cf5b9f0eace2a6bd0a3f19c6fa42f8986273"));
     utf8_menu.id = utf8.id;
     dtp_annotation_setup(&utf8_menu);
     assert(action(utf8_view,"Prototype: remove test highlight"));
+    assert(utf8_menu.property("dtp_hash").toByteArray()=="a7cf4d7480a93336252886d377d9cf5b9f0eace2a6bd0a3f19c6fa42f8986273");
     dtp_annotations_enable(false);
     dtp_annotation_setup(&menu);
     assert(!action(view,"Prototype: remove test highlight"));
@@ -262,7 +250,7 @@ int main(int argc, char **argv) {
     run_rendering_cases();
     run_old_highlight_cases();
     run_longpress_cases();
-    std::puts("PASS: ARM Qt 5.2.1 menu signals, native save/delete dispatch, persistent registry, note/range/text/ownership guards, stale UI guards, QObject lifetime, ordinary pass-through");
+    std::puts("PASS: ARM Qt 5.2.1 menu signals, native save/delete dispatch, native-only persistence, note/range/text snapshot guards, stale UI guards, QObject lifetime, ordinary pass-through");
     return 0;
 }
 #include "annotation-qt-test.moc"

@@ -2,24 +2,17 @@
 #include "annotations.h"
 #include "report.h"
 #include "japanese.h"
-#include "settings.h"
 #include <NickelHook.h>
 #include <QCoreApplication>
 #include <QCryptographicHash>
-#include <QFile>
-#include <QMap>
 #include <QMetaObject>
 #include <QPointer>
 #include <QPushButton>
-#include <QSaveFile>
 #include <QStringList>
 #include <QThread>
 #include <QVariant>
 #include <QWidget>
 
-#ifndef DTP_ANNOTATION_REGISTRY
-#define DTP_ANNOTATION_REGISTRY "/mnt/onboard/.kobo/doubletap-test-highlights"
-#endif
 #ifndef DTP_ANNOTATION_REPORT
 #define DTP_ANNOTATION_REPORT "/mnt/onboard/.kobo/doubletap-annotations.log"
 #endif
@@ -38,7 +31,6 @@ typedef const QByteArray &(*BytesGetter)(const void *);
 typedef int (*IntGetter)(const void *);
 typedef bool (*BoolGetter)(const void *);
 typedef QWidget *(*ItemFactory)(void *, QWidget *, const QString &);
-typedef QMap<QString, QByteArray> Registry;
 
 bool annotation_enabled;
 #ifdef DTP_TEST_MANUAL_MENU
@@ -53,7 +45,7 @@ bool manual_menu_enabled() {
 }
 unsigned report_records;
 struct BuildScope { void *controller; bool injected; QString id; QByteArray hash; bool plain; };
-struct SaveScope { QString tracked_id; bool automatic; QString candidate_id; QByteArray candidate_hash, expected_word; QStringList failed_ids; SaveScope() : automatic(false) {} };
+struct SaveScope { QString saved_id; bool automatic; QString candidate_id; QByteArray candidate_hash, expected_word; QStringList failed_ids; SaveScope() : automatic(false) {} };
 struct DeleteScope { QString id; unsigned forwarded, blocked; bool automatic; QByteArray expected_word, expected_hash; };
 static __thread BuildScope *building;
 static __thread SaveScope *saving;
@@ -82,40 +74,6 @@ bool valid_id(const QString &id) {
         } else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) return false;
     }
     return true;
-}
-
-Registry read_registry() {
-    Registry result;
-    QFile file(QLatin1String(DTP_ANNOTATION_REGISTRY));
-    if (!file.open(QIODevice::ReadOnly) || file.size() > 512 * 1024) return result;
-    if (file.readLine().trimmed() != "DTP-TEST-HIGHLIGHTS-2") return result;
-    while (!file.atEnd()) {
-        const QList<QByteArray> fields = file.readLine(256).trimmed().split('\t');
-        if (fields.size() != 2) return Registry();
-        const QString id = QString::fromLatin1(fields.at(0));
-        const QByteArray hash = fields.at(1);
-        if (!valid_id(id) || hash.size() != 64 || result.contains(id)) return Registry();
-        for (int i = 0; i < hash.size(); ++i) {
-            const char c = hash.at(i);
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return Registry();
-        }
-        result.insert(id, hash);
-        if (result.size() > DTP_REGISTRY_LIMIT) return Registry();
-    }
-    return result;
-}
-
-bool remember(const QString &id, const QByteArray &hash) {
-    if (!valid_id(id) || hash.size() != 64) return false;
-    Registry entries = read_registry();
-    if (entries.size() >= DTP_REGISTRY_LIMIT && !entries.contains(id)) return false;
-    entries.insert(id, hash);
-    QSaveFile file(QLatin1String(DTP_ANNOTATION_REGISTRY));
-    if (!file.open(QIODevice::WriteOnly)) return false;
-    QByteArray data("DTP-TEST-HIGHLIGHTS-2\n");
-    for (Registry::const_iterator it = entries.constBegin(); it != entries.constEnd(); ++it)
-        data += it.key().toLatin1() + '\t' + it.value() + '\n';
-    return file.write(data) == data.size() && file.commit();
 }
 
 void hash_part(QCryptographicHash &hash, const QByteArray &part) {
@@ -187,8 +145,8 @@ void add_action(void *controller, QWidget *view, bool remove, const QString &exp
             if (menu->property("dtp_delete_dispatched").toBool()) return;
             if (id != expected_id || !menu->property("dtp_plain").toBool() ||
                 menu->property("dtp_id").toString() != id ||
-                read_registry().value(id) != menu->property("dtp_hash").toByteArray()) {
-                report("annotation remove refused: stale or unowned selection"); return;
+                menu->property("dtp_hash").toByteArray().size() != 64) {
+                report("annotation remove refused: stale or invalid selection"); return;
             }
             menu->setProperty("dtp_delete_dispatched", true);
             DeleteScope scope = {id, 0, 0, false, QByteArray(), menu->property("dtp_hash").toByteArray()};
@@ -206,8 +164,8 @@ void add_action(void *controller, QWidget *view, bool remove, const QString &exp
             ScopeGuard<SaveScope> guard(saving, &scope);
             const bool invoked = QMetaObject::invokeMethod(menu.data(), "highlight", Qt::DirectConnection);
             report(!invoked ? "annotation highlight signal unavailable" :
-                   scope.tracked_id.isEmpty() ? "annotation save invoked; no plain saved record tracked" :
-                   "annotation save completed and test record registered");
+                   scope.saved_id.isEmpty() ? "annotation save invoked; no plain saved record tracked" :
+                   "annotation save completed");
         }
     });
     reinterpret_cast<void (*)(void *, QWidget *)>(dtpa_add_item)(view, item);
@@ -230,13 +188,6 @@ extern "C" void dtp_annotation_test_menu_enable(bool enable) { test_manual_menu 
 #endif
 
 extern "C" bool dtp_annotations_ready(void) { return annotation_enabled; }
-extern "C" bool dtp_annotation_owned(const void *bookmark) {
-    if (!annotation_enabled || !bookmark || !plain_highlight(bookmark)) return false;
-    const QString &id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
-    const QByteArray expected = read_registry().value(id);
-    return !expected.isEmpty() && expected == fingerprint(bookmark);
-}
-
 extern "C" bool dtp_annotation_has_current(void *controller) {
     return annotation_enabled && controller && gui_thread() && !current_id(controller).isEmpty();
 }
@@ -250,8 +201,8 @@ extern "C" bool dtp_annotation_auto_action(void *controller, const char *expecte
     if (id.isEmpty()) {
         // Nickel changes its page markup before it reaches BookmarkManager::save.
         // Refuse known failures before invoking that mutating native signal.
-        if (!expected_utf8 || !word_text(QByteArray(expected_utf8)) || read_registry().size() >= DTP_REGISTRY_LIMIT) {
-            report("double-tap save refused before display change: invalid word or full registry"); return false;
+        if (!expected_utf8 || !word_text(QByteArray(expected_utf8))) {
+            report("double-tap save refused before display change: invalid word"); return false;
         }
         if (!book || !dtpj_web_view || !dtpj_page || !dtpj_frame || !dtpj_remove_visual) {
             report("double-tap save refused before display change: visual rollback unavailable"); return false;
@@ -263,16 +214,16 @@ extern "C" bool dtp_annotation_auto_action(void *controller, const char *expecte
         ScopeGuard<SaveScope> guard(saving, &scope);
         const bool invoked = QMetaObject::invokeMethod(menu.data(), "highlight", Qt::DirectConnection);
         for (int i = 0; i < scope.failed_ids.size(); ++i) {
-            if (scope.failed_ids.at(i) == scope.tracked_id) continue;
+            if (scope.failed_ids.at(i) == scope.saved_id) continue;
             const bool cleared = dtp_remove_failed_visual(live_book.data(), &scope.failed_ids.at(i));
             report(cleared ? "rejected native highlight visual cleanup dispatched" : "rejected native highlight: reopen book to clear display");
         }
-        const bool ok = invoked && !scope.tracked_id.isEmpty();
-        report(ok ? "double-tap highlight saved and registered" : "double-tap save refused or no synchronous save observed");
+        const bool ok = invoked && !scope.saved_id.isEmpty();
+        report(ok ? "double-tap highlight saved" : "double-tap save refused or no synchronous save observed");
         return ok;
     }
     // Native hit testing supplies the existing highlight ID. Deletion is not
-    // restricted to our registry: the user may remove any note-free passage.
+    // based on the fresh native menu snapshot, not a separate saved registry.
     const QByteArray snapshot = menu->property("dtp_hash").toByteArray();
     if (!valid_id(id) || !menu->property("dtp_plain").toBool() ||
         menu->property("dtp_id").toString() != id || snapshot.size() != 64) {
@@ -308,8 +259,6 @@ extern "C" __attribute__((visibility("default"))) void dtp_annotation_setup(void
     if (manual_menu_enabled() && !id.isEmpty() && !scope.injected) {
         report(scope.id != id ? "annotation remove withheld: bookmark not observed during menu build" :
                !scope.plain ? "annotation remove withheld: selection is not a note-free highlight" :
-               !read_registry().contains(id) ? "annotation remove withheld: record not registered with current fingerprint format" :
-               read_registry().value(id) != scope.hash ? "annotation remove withheld: saved range fingerprint differs" :
                "annotation remove withheld: native option or method not recognized");
     }
 }
@@ -324,7 +273,7 @@ extern "C" __attribute__((visibility("default"))) void *dtp_annotation_create_it
     const QString id = current_id(controller);
     const bool save = id.isEmpty() && text == QCoreApplication::translate("SelectionMenuController", "Highlight");
     const bool remove = !id.isEmpty() && id == building->id && building->plain &&
-        building->hash.size() == 64 && read_registry().value(id) == building->hash &&
+        building->hash.size() == 64 &&
         text == QCoreApplication::translate("SelectionMenuController", "Remove Highlight");
     QObject *menu = reinterpret_cast<QObject *>(controller);
     if ((save && menu->metaObject()->indexOfSignal("highlight()") < 0) ||
@@ -358,10 +307,9 @@ extern "C" __attribute__((visibility("default"))) bool dtp_annotation_save(void 
         const QByteArray hash = fingerprint(bookmark);
         if (!plain_highlight(bookmark) || !single_word(bookmark) || hash.isEmpty() || !valid_id(id) ||
             (!saving->expected_word.isEmpty() && reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark) != saving->expected_word) ||
-            (read_registry().size() >= DTP_REGISTRY_LIMIT && !read_registry().contains(id)) ||
             (!saving->candidate_id.isEmpty() && (saving->candidate_id != id || saving->candidate_hash != hash))) {
             if (valid_id(id) && saving->failed_ids.size() < 8 && !saving->failed_ids.contains(id)) saving->failed_ids.append(id);
-            report("double-tap native save blocked: invalid word, batch change, or full registry"); return false;
+            report("double-tap native save blocked: invalid word or batch change"); return false;
         }
         saving->candidate_id = id;
         saving->candidate_hash = hash;
@@ -374,21 +322,8 @@ extern "C" __attribute__((visibility("default"))) bool dtp_annotation_save(void 
     }
     if (annotation_enabled && saving && ok && plain_highlight(bookmark)) {
         const QString &id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
-        if ((saving->tracked_id.isEmpty() || saving->tracked_id == id) && remember(id, fingerprint(bookmark)))
-            saving->tracked_id = id;
-    }
-    // Manually saved Japanese words need the same zero-offset rendering fix
-    // as quick highlights. Register only successful, note-free bounded words;
-    // this changes the local fingerprint registry, never the saved annotation.
-    if (annotation_enabled && !saving && ok && gui_thread() &&
-        dtp_settings_longpress() && plain_highlight(bookmark) && single_word(bookmark)) {
-        const QString text=QString::fromUtf8(reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark));
-        bool japanese=false;
-        for (int i=0; i<text.size(); ++i) {
-            const ushort c=text.at(i).unicode();
-            japanese=japanese || (c>=0x3040 && c<=0x30ff) || (c>=0x3400 && c<=0x9fff) || (c>=0xff66 && c<=0xff9f);
-        }
-        if (japanese) remember(reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark),fingerprint(bookmark));
+        if (valid_id(id) && (saving->saved_id.isEmpty() || saving->saved_id == id))
+            saving->saved_id = id;
     }
     return ok;
 }
@@ -399,7 +334,7 @@ extern "C" __attribute__((visibility("default"))) void dtp_annotation_delete(voi
     }
     if (annotation_enabled && deleting) {
         const QString &id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
-        const QByteArray expected = deleting->automatic ? deleting->expected_hash : read_registry().value(id);
+        const QByteArray expected = deleting->expected_hash;
         if (deleting->forwarded || id != deleting->id || expected.isEmpty() || !plain_highlight(bookmark) ||
             (!deleting->expected_word.isEmpty() && reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark) != deleting->expected_word) ||
             expected != fingerprint(bookmark)) {

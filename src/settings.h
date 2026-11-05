@@ -5,6 +5,7 @@
 extern "C" {
 #endif
 bool dtp_settings_longpress(void);
+bool dtp_settings_rendering(void);
 extern void *dtpl_is_held;
 bool dtp_longpress_start(void *controller, void *tap);
 #ifdef __cplusplus

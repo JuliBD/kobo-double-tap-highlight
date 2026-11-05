@@ -1,6 +1,7 @@
 /* Correct the pinned native zero-offset renderer without changing stored ranges. */
 #include "rendering.h"
 #include "annotations.h"
+#include "settings.h"
 #include "toggle.h"
 #include "report.h"
 #include <QString>
@@ -68,14 +69,20 @@ static void report(const char *message) {
 
 extern "C" __attribute__((visibility("default"))) void dtp_render_add(
         void *element, const void *bookmark, int start, int end, int part, bool reverse, const void *style) {
-    if (start == 0 && end > 0 && dtpr_partial && dtpr_part_id && dtp_annotation_owned(bookmark)) {
+    if (start == 0 && end > 0 && dtpr_partial && dtpr_part_id && bookmark && dtpa_get_id &&
+        dtp_annotations_ready() && dtp_settings_rendering()) {
         const QString &id = reinterpret_cast<const QString &(*)(const void *)>(dtpa_get_id)(bookmark);
+        if (id.isEmpty()) {
+            reinterpret_cast<void (*)(void *, const void *, int, int, int, bool, const void *)>(dtpr_add)(
+                element, bookmark, start, end, part, reverse, style);
+            return;
+        }
         const QString span_id = part ? reinterpret_cast<QString (*)(int, const QString &)>(dtpr_part_id)(part, id) : id;
         // The native add helper chooses its whole-element overload when start==0,
         // ignoring a positive finite end. Invoke its existing partial overload.
         reinterpret_cast<void (*)(void *, int, int, const QString &, const QString &, bool, const QString &)>(dtpr_partial)(
             element, start, end, span_id, id, reverse, *static_cast<const QString *>(style));
-        report("owned zero-offset highlight rendered through bounded native range");
+        report("zero-offset highlight rendered through bounded native range");
         return;
     }
     reinterpret_cast<void (*)(void *, const void *, int, int, int, bool, const void *)>(dtpr_add)(

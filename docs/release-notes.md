@@ -1,4 +1,4 @@
-# Kobo Double Tap v0.8.0-beta.4
+# Kobo Double Tap v0.8.0-beta.5
 
 Limited beta candidate: core functions and recovery tests passed on the target
 Libra 2. Broader device/firmware compatibility remains untested.
@@ -53,3 +53,19 @@ uninstall comparison found no changes to existing annotations.
 Beta.4 allows untested models/firmware to initialize. Missing or unfamiliar
 version metadata emits an advisory warning rather than disabling the plugin.
 Required-symbol checks and the user disable flag still apply.
+
+Beta.5 removes the duplicate ID/checksum registry and its 4096-entry limit.
+All highlight persistence uses Kobo's native annotation system. In-operation
+snapshots still detect unexpected save/delete changes; nothing is stored in a
+second highlight registry. Existing legacy metadata is ignored.
+
+The rendering correction is now an independent NickelMenu option, **Highlight
+rendering fix**, default On. It applies to all native highlight ranges, including
+old/multiword/note-bearing highlights, without changing stored records. Off
+restores native rendering. Reopen the book after changing it to redraw existing
+highlights. The long-press option is independent and also defaults to On.
+
+Beta.5 device checks passed on Libra 2 / 4.38.23852 / KEPUB: existing-highlight
+rendering, rendering Off/On after reopening, and double-tap save/remove. The
+legacy registry remains absent after use. Other device/firmware combinations
+and the fate of notes attached to removed highlights remain unverified.

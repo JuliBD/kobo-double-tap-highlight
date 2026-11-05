@@ -75,41 +75,51 @@ static void run_partial_delivery_cases() {
 }
 static void run_rendering_cases() {
     dtp_annotations_enable(true); initialize_rendering();
+    QFile::remove(QStringLiteral("build/native-test/settings"));
+    assert(dtp_settings_rendering());
     run_partial_delivery_cases();
-    const unsigned full_before = direct_full_refresh_calls;
+    const unsigned full_before=direct_full_refresh_calls;
     dtp_render_force_full(NULL);
-    assert(direct_full_refresh_calls == full_before + 1); // The diagnostic hook always forwards.
-    const QString registry(QStringLiteral("build/native-test/registry"));
-    QFile::remove(registry);
-    TestBookmark bookmark = {QString(),QStringLiteral("test-book"),QStringLiteral("p1"),QStringLiteral("p1"),
-                             QStringLiteral("私").toUtf8(),QByteArray(),0,0,0,1,true,false,false};
-    SelectionMenuView view;
-    SelectionMenuController menu(&view,&bookmark);
-    dtp_annotation_setup(&menu); tap(action(view,"Prototype: save selection"));
-    assert(dtp_annotation_owned(&bookmark));
-    render_original_calls = render_partial_calls = 0;
-    int element = 0;
+    assert(direct_full_refresh_calls==full_before+1);
+    TestBookmark bookmark={QStringLiteral("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        QStringLiteral("test-book"),QStringLiteral("p1"),QStringLiteral("p1"),
+        QStringLiteral("私").toUtf8(),QByteArray(),0,0,0,1,true,false,false};
+    const TestBookmark unchanged=bookmark;
+    render_original_calls=render_partial_calls=0;
+    int element=0;
     const QString style(QStringLiteral("test-style"));
     dtp_render_add(&element,&bookmark,0,1,0,false,&style);
-    assert(render_partial_calls == 1 && render_original_calls == 0 && rendered_start == 0 && rendered_end == 1);
-    assert(rendered_id == bookmark.id && rendered_base == bookmark.id);
+    assert(render_partial_calls==1 && render_original_calls==0 && rendered_start==0 && rendered_end==1);
+    assert(rendered_id==bookmark.id && rendered_base==bookmark.id);
     dtp_render_add(&element,&bookmark,0,1,2,false,&style);
-    assert(render_partial_calls == 2 && rendered_id == bookmark.id + QStringLiteral(".-.2") && rendered_base == bookmark.id);
+    assert(render_partial_calls==2 && rendered_id==bookmark.id+QStringLiteral(".-.2") && rendered_base==bookmark.id);
     dtp_render_add(&element,&bookmark,1,2,0,false,&style);
     dtp_render_add(&element,&bookmark,0,0,0,false,&style);
-    assert(render_original_calls == 2);
-    const QString owned = bookmark.id;
-    bookmark.id = QStringLiteral("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    dtp_render_add(&element,&bookmark,0,-1,0,false,&style);
+    assert(render_original_calls==3);
+    // Old highlights, passages and notes use the supplied native range too.
+    bookmark.text="an old multiword passage";bookmark.note="attached note";bookmark.noteType=true;
+    dtp_render_add(&element,&bookmark,0,5,0,true,&style);
+    assert(render_partial_calls==3 && rendered_end==5);
+    assert(bookmark.text=="an old multiword passage" && bookmark.note=="attached note" && bookmark.noteType);
+    assert(bookmark.start==unchanged.start && bookmark.end==unchanged.end && bookmark.endOffset==unchanged.endOffset);
+    QFile config(QStringLiteral("build/native-test/settings"));
+    assert(config.open(QIODevice::WriteOnly));
+    config.write("japanese_long_press_words=1\nhighlight_rendering_fix=0\n");config.close();
+    assert(dtp_settings_longpress() && !dtp_settings_rendering());
     dtp_render_add(&element,&bookmark,0,1,0,false,&style);
-    bookmark.id = owned; bookmark.note = QByteArray("note");
+    assert(render_original_calls==4 && render_partial_calls==3);
+    assert(config.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    config.write("japanese_long_press_words=0\nhighlight_rendering_fix=1\n");config.close();
+    assert(!dtp_settings_longpress() && dtp_settings_rendering());
     dtp_render_add(&element,&bookmark,0,1,0,false,&style);
-    bookmark.note.clear(); bookmark.endOffset = 2;
+    assert(render_partial_calls==4);
+    bookmark.id.clear(); // Unsaved selections are not persistent highlights.
     dtp_render_add(&element,&bookmark,0,1,0,false,&style);
-    assert(render_original_calls == 5 && render_partial_calls == 2);
+    assert(render_original_calls==5 && render_partial_calls==4);
     dtp_annotations_enable(false);
-    bookmark.endOffset = 1;
     dtp_render_add(&element,&bookmark,0,1,0,false,&style);
-    assert(render_original_calls == 6);
-    QFile::remove(registry);
-    std::puts("PASS: owned zero-offset 0..1 uses native partial rendering, multipart IDs preserved; nonzero/sentinel/unowned/note/changed/disabled rendering unchanged");
+    assert(render_original_calls==6);
+    QFile::remove(config.fileName());
+    std::puts("PASS: default-On rendering for old/new/long/note highlights without metadata; Off/native fallback, independent preferences and multipart/sentinel behavior; no annotation changes");
 }
