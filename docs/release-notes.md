@@ -1,4 +1,10 @@
-# Kobo Double Tap v0.8.0-beta.5
+# Kobo Double Tap v0.8.0-beta.6
+
+Beta.6 keeps the inline dictionary picker available for short Japanese words
+when the selected dictionary has no match. With English selected on Libra 2
+firmware 4.38.23852, both a long press and a tap on a saved Japanese highlight
+now open the popup. See [issue #1](https://github.com/JuliBD/kobo-double-tap-highlight/issues/1).
+The workaround is enabled on that model and firmware.
 
 Limited beta candidate: core functions and recovery tests passed on the target
 Libra 2. Broader device/firmware compatibility remains untested.
