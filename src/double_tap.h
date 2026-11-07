@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Diagnostic observer thresholds; highlighting uses Nickel's recognizer. */
 enum { DTP_PAIR_WINDOW_MS = 400, DTP_PRESS_LIMIT_MS = 350,
        DTP_PAIR_RADIUS_PX = 48, DTP_MOVEMENT_RADIUS_PX = 24 };
 

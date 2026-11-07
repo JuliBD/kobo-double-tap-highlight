@@ -12,9 +12,18 @@ English uses Kobo's native word selection.
 ## Demo
 
 Double-tap to add a highlight, then double-tap it again to remove it.
-Click the animated preview to open the video.
 
-[![Double-tap highlighting in an English book](docs/media/english-double-tap-demo.gif)](docs/media/english-double-tap-demo.mp4)
+
+### English
+
+![Double-tap highlighting in an English book](docs/media/english-double-tap-demo.gif)
+
+### Japanese
+
+Double-tap highlighting with on-device Japanese word segmentation.
+Click the animated preview to open the MP4 video.
+
+[![Double-tap highlighting in a Japanese book](docs/media/japanese-double-tap-demo.gif)](docs/media/japanese-double-tap-demo.mp4)
 
 ## Compatibility
 
@@ -23,7 +32,8 @@ Other models and firmware versions can try the plugin, but compatibility is
 not confirmed. Back up your annotations and settings before installing.
 
 - Works with **KEPUB books in the built-in Kobo reader**.
-- EPUB and PDF support is not implemented.
+- EPUB is untested. PDF highlighting is unsupported. Double-tapping a PDF
+  uses Kobo's built-in zoom.
 - NickelMenu is optional and provides the Japanese long-press setting.
 - No account, internet connection or PC connection is needed while reading.
 
@@ -47,6 +57,11 @@ To update, repeat these steps with the newer release's `KoboRoot.tgz`.
   **entire highlight**, including a multiword passage.
 - **Select Japanese words:** long-press Japanese text, then use Kobo's normal
   highlight, dictionary or selection-handle controls.
+
+On Libra 2 firmware 4.38.23852, the dictionary picker stays available for
+short Japanese words even when the English dictionary has no entry. Long-press
+a Japanese word or single-tap an existing word highlight, then switch to the
+Japanese dictionary in the popup.
 
 Single taps, page buttons and English long presses keep their usual behavior.
 You can still highlight and remove highlights using Kobo's normal controls.
@@ -120,7 +135,7 @@ looks wrong in the annotations list and after reopening the book.
 Inspect any logs or screenshots before sharing them. Do not upload whole books,
 annotation databases or device backups.
 
-[Build instructions](docs/build.md) · [Release notes](docs/release-notes.md) ·
+[Build instructions](docs/build.md) · [Implementation notes](docs/implementation-notes.md) · [Release notes](docs/release-notes.md) ·
 [Third-party notices](THIRD_PARTY.md) · [MIT license](LICENSE)
 
 An independent community project, unaffiliated with Kobo or Rakuten.

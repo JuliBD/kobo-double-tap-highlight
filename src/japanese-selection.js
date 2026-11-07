@@ -88,7 +88,7 @@ function dtpJapaneseSelection() {
                 text.slice(request.start,request.end) !== request.word) return reply("reject");
             chosen = {start:request.start,end:request.end,word:request.word};
         } else {
-        // Retained TinySegmenter backend. Active Sudachi never enters this branch.
+        // Default release backend. Optional Sudachi apply mode supplies bounds above.
         var tokens = new TinySegmenter().segment(text);
         if (tokens.join("") !== text) return reply("reject");
         var at = 0;

@@ -14,6 +14,8 @@ static char last_kind[128];
 static long long clock_ms = 1000;
 
 /* The C hook tests do not invoke the Qt annotation adapter. */
+void *dtpa_count_words, *dtpa_inline_results;
+void dtp_dictionary_popup_enable(bool tested) { (void)tested; }
 void *dtpa_setup, *dtpa_create_item, *dtpa_add_item, *dtpa_current_id;
 void *dtpa_get_id, *dtpa_save, *dtpa_delete;
 void *dtpa_is_highlight, *dtpa_is_note, *dtpa_annotation_raw, *dtpa_text_raw;
@@ -89,11 +91,11 @@ int main(void) {
     tap_is_held = held;
     tap_is_pressed = pressed;
     tap_position = position;
-    assert(tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL "\r\n"));
-    assert(!tested_configuration("fake,4.1.15,4.38.23684,4.1.15,4.1.15," DTP_MODEL));
-    assert(!tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15,other"));
-    assert(!tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL ",extra"));
-    assert(!tested_configuration(""));
+    assert(is_tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL "\r\n"));
+    assert(!is_tested_configuration("fake,4.1.15,4.38.23684,4.1.15,4.1.15," DTP_MODEL));
+    assert(!is_tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15,other"));
+    assert(!is_tested_configuration("fake,4.1.15,4.38.23852,4.1.15,4.1.15," DTP_MODEL ",extra"));
+    assert(!is_tested_configuration(""));
 
     /* Untested or unreadable metadata must not block initialization. */
     remove(DTP_DEVICE_VERSION_FILE); remove(DTP_DISABLE_FILE);

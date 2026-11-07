@@ -1,4 +1,4 @@
-/* Native menu integration for an explicitly selected test range. */
+/* Guarded native annotation actions; manual menu injection is test-only. */
 #include "annotations.h"
 #include "report.h"
 #include "japanese.h"
@@ -12,12 +12,14 @@
 #include <QThread>
 #include <QVariant>
 #include <QWidget>
+#include <cstdint>
 
 #ifndef DTP_ANNOTATION_REPORT
 #define DTP_ANNOTATION_REPORT "/mnt/onboard/.kobo/doubletap-annotations.log"
 #endif
 
 extern "C" {
+void *dtpa_count_words, *dtpa_inline_results;
 void *dtpa_setup, *dtpa_create_item, *dtpa_add_item, *dtpa_current_id;
 void *dtpa_get_id, *dtpa_save, *dtpa_delete;
 void *dtpa_is_highlight, *dtpa_is_note, *dtpa_annotation_raw, *dtpa_text_raw;
@@ -33,6 +35,7 @@ typedef bool (*BoolGetter)(const void *);
 typedef QWidget *(*ItemFactory)(void *, QWidget *, const QString &);
 
 bool annotation_enabled;
+uintptr_t inline_result_word_count_return;
 #ifdef DTP_TEST_MANUAL_MENU
 bool test_manual_menu;
 #endif
@@ -97,13 +100,13 @@ QByteArray fingerprint(const void *bookmark) {
     return hash.result().toHex();
 }
 
-bool plain_highlight(const void *bookmark) {
+bool is_note_free_highlight(const void *bookmark) {
     return reinterpret_cast<BoolGetter>(dtpa_is_highlight)(bookmark) &&
            !reinterpret_cast<BoolGetter>(dtpa_is_note)(bookmark) &&
            reinterpret_cast<BytesGetter>(dtpa_annotation_raw)(bookmark).isEmpty();
 }
 
-bool word_text(const QByteArray &raw) {
+bool is_safe_word_text(const QByteArray &raw, bool require_japanese = false) {
     if (raw.isEmpty() || raw.size() > 512) return false;
     const QString text = QString::fromUtf8(raw.constData(), raw.size());
     if (text.toUtf8() != raw || text.size() > 128) return false;
@@ -115,10 +118,10 @@ bool word_text(const QByteArray &raw) {
         if (!c.isLetterOrNumber() && !c.isMark() && u != '\'' && u != '-' && u != 0x2019) return false;
         letter = letter || c.isLetterOrNumber();
     }
-    return letter && (!japanese || text.size() <= 24);
+    return letter && (!require_japanese || japanese) && (!japanese || text.size() <= 24);
 }
 
-bool single_word(const void *bookmark) { return word_text(reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark)); }
+bool is_safe_word_highlight(const void *bookmark) { return is_safe_word_text(reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark)); }
 
 QString current_id(const void *controller) {
     return reinterpret_cast<QString (*)(const void *)>(dtpa_current_id)(controller);
@@ -179,13 +182,42 @@ extern "C" void dtp_annotations_enable(bool enable) {
         dtpa_annotation_raw && dtpa_text_raw && dtpa_content_id && dtpa_start_path && dtpa_end_path &&
         dtpa_start_child && dtpa_end_child && dtpa_start_offset && dtpa_end_offset;
     report_records = 0;
-    report(annotation_enabled ? "annotation prototype enabled" : "annotation prototype inactive");
+    report(annotation_enabled ? "annotation integration enabled" : "annotation integration inactive");
 }
 
 #ifdef DTP_TEST_MANUAL_MENU
 // Historical backend fixtures only. No switch or manual actions in device builds.
 extern "C" void dtp_annotation_test_menu_enable(bool enable) { test_manual_menu = enable; }
 #endif
+
+extern "C" void dtp_dictionary_popup_enable(bool tested) {
+    inline_result_word_count_return = 0;
+    if (tested && dtpa_inline_results && dtpa_count_words) {
+        // Libra 2 / 4.38.23852: onInlineDefinitionResults starts at f9ff20.
+        // Its countWords call at fa018a returns to fa018e. Mask the Thumb bit.
+        inline_result_word_count_return =
+            (reinterpret_cast<uintptr_t>(dtpa_inline_results) & ~uintptr_t(1)) + 0x26e;
+    }
+}
+
+extern "C" __attribute__((visibility("default"), noinline))
+int dtp_dictionary_count_words(const void *text, const void *language, const void *locale) {
+    const uintptr_t caller = reinterpret_cast<uintptr_t>(
+        __builtin_extract_return_addr(__builtin_return_address(0))) & ~uintptr_t(1);
+    const int count = reinterpret_cast<int (*)(const void *, const void *, const void *)>(
+        dtpa_count_words)(text, language, locale);
+    if (count > 1 && annotation_enabled && inline_result_word_count_return &&
+        caller == inline_result_word_count_return && gui_thread()) {
+        const QString &word = *static_cast<const QString *>(text);
+        if (word.size() <= 24 && is_safe_word_text(word.toUtf8(), true)) {
+            // Keep the native popup eligible on a miss so its dictionary picker
+            // stays available. The lookup itself uses the original dictionary.
+            report("inline dictionary kept eligible for Japanese word");
+            return 1;
+        }
+    }
+    return count;
+}
 
 extern "C" bool dtp_annotations_ready(void) { return annotation_enabled; }
 extern "C" bool dtp_annotation_has_current(void *controller) {
@@ -201,7 +233,7 @@ extern "C" bool dtp_annotation_auto_action(void *controller, const char *expecte
     if (id.isEmpty()) {
         // Nickel changes its page markup before it reaches BookmarkManager::save.
         // Refuse known failures before invoking that mutating native signal.
-        if (!expected_utf8 || !word_text(QByteArray(expected_utf8))) {
+        if (!expected_utf8 || !is_safe_word_text(QByteArray(expected_utf8))) {
             report("double-tap save refused before display change: invalid word"); return false;
         }
         if (!book || !dtpj_web_view || !dtpj_page || !dtpj_frame || !dtpj_remove_visual) {
@@ -222,8 +254,8 @@ extern "C" bool dtp_annotation_auto_action(void *controller, const char *expecte
         report(ok ? "double-tap highlight saved" : "double-tap save refused or no synchronous save observed");
         return ok;
     }
-    // Native hit testing supplies the existing highlight ID. Deletion is not
-    // based on the fresh native menu snapshot, not a separate saved registry.
+    // Native hit testing supplies the existing highlight ID. Deletion is based
+    // on the fresh native menu snapshot, not a separate saved registry.
     const QByteArray snapshot = menu->property("dtp_hash").toByteArray();
     if (!valid_id(id) || !menu->property("dtp_plain").toBool() ||
         menu->property("dtp_id").toString() != id || snapshot.size() != 64) {
@@ -289,12 +321,12 @@ extern "C" __attribute__((visibility("default"))) const void *dtp_annotation_boo
     const QString &id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
     if (annotation_enabled && building && !id.isEmpty()) {
         building->id = id;
-        building->plain = plain_highlight(bookmark);
+        building->plain = is_note_free_highlight(bookmark);
         building->hash = fingerprint(bookmark);
         QObject *menu = reinterpret_cast<QObject *>(building->controller);
         menu->setProperty("dtp_id", id);
         menu->setProperty("dtp_plain", building->plain);
-        menu->setProperty("dtp_word", single_word(bookmark));
+        menu->setProperty("dtp_word", is_safe_word_highlight(bookmark));
         menu->setProperty("dtp_text", reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark));
         menu->setProperty("dtp_hash", building->hash);
     }
@@ -305,7 +337,7 @@ extern "C" __attribute__((visibility("default"))) bool dtp_annotation_save(void 
     if (annotation_enabled && saving && saving->automatic) {
         const QString id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
         const QByteArray hash = fingerprint(bookmark);
-        if (!plain_highlight(bookmark) || !single_word(bookmark) || hash.isEmpty() || !valid_id(id) ||
+        if (!is_note_free_highlight(bookmark) || !is_safe_word_highlight(bookmark) || hash.isEmpty() || !valid_id(id) ||
             (!saving->expected_word.isEmpty() && reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark) != saving->expected_word) ||
             (!saving->candidate_id.isEmpty() && (saving->candidate_id != id || saving->candidate_hash != hash))) {
             if (valid_id(id) && saving->failed_ids.size() < 8 && !saving->failed_ids.contains(id)) saving->failed_ids.append(id);
@@ -320,7 +352,7 @@ extern "C" __attribute__((visibility("default"))) bool dtp_annotation_save(void 
         const QString id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
         if (valid_id(id) && saving->failed_ids.size() < 8 && !saving->failed_ids.contains(id)) saving->failed_ids.append(id);
     }
-    if (annotation_enabled && saving && ok && plain_highlight(bookmark)) {
+    if (annotation_enabled && saving && ok && is_note_free_highlight(bookmark)) {
         const QString &id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
         if (valid_id(id) && (saving->saved_id.isEmpty() || saving->saved_id == id))
             saving->saved_id = id;
@@ -335,7 +367,7 @@ extern "C" __attribute__((visibility("default"))) void dtp_annotation_delete(voi
     if (annotation_enabled && deleting) {
         const QString &id = reinterpret_cast<StringGetter>(dtpa_get_id)(bookmark);
         const QByteArray expected = deleting->expected_hash;
-        if (deleting->forwarded || id != deleting->id || expected.isEmpty() || !plain_highlight(bookmark) ||
+        if (deleting->forwarded || id != deleting->id || expected.isEmpty() || !is_note_free_highlight(bookmark) ||
             (!deleting->expected_word.isEmpty() && reinterpret_cast<BytesGetter>(dtpa_text_raw)(bookmark) != deleting->expected_word) ||
             expected != fingerprint(bookmark)) {
             ++deleting->blocked;

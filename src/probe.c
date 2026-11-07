@@ -42,7 +42,7 @@ static unsigned records;
 static struct dtp_recognizer recognizer;
 
 /* A serial number is present in field zero; never log the input line. */
-static bool tested_configuration(const char *line) {
+static bool is_tested_configuration(const char *line) {
     const char *field = line;
     unsigned index = 0;
     bool firmware = false, model = false;
@@ -60,7 +60,7 @@ static bool tested_configuration(const char *line) {
     return index == 5 && firmware && model;
 }
 
-/* Exported for NickelHook's dlsym. Opaque pointers; no private object layouts. */
+/* Exported for NickelHook's dlsym. Opaque signatures still require the native ABI. */
 __attribute__((visibility("default")))
 void dtp_process_tap(void *reader, void *tap) {
     if (enabled && tap) {
@@ -99,6 +99,7 @@ static int probe_init(void) {
     char line[512];
     FILE *file;
     enabled = false;
+    dtp_dictionary_popup_enable(false);
     dtp_annotations_enable(false);
     dtp_toggle_enable(false);
     if (!original_process_tap || !tap_is_double || !tap_is_held ||
@@ -113,7 +114,7 @@ static int probe_init(void) {
     bool tested = false;
     file = fopen(DTP_DEVICE_VERSION_FILE, "r");
     if (file) {
-        if (fgets(line, sizeof(line), file)) tested = tested_configuration(line);
+        if (fgets(line, sizeof(line), file)) tested = is_tested_configuration(line);
         fclose(file);
     }
     // Version/model information is advisory, never an activation whitelist.
@@ -122,6 +123,7 @@ static int probe_init(void) {
         nh_log("WARNING: untested device/firmware; only Libra 2 / " DTP_VERSION " has been tested; attempting initialization");
     enabled = true;
     dtp_annotations_enable(true);
+    dtp_dictionary_popup_enable(tested);
     dtp_toggle_enable(true);
     records = 0;
     dtp_reset(&recognizer);
@@ -139,6 +141,8 @@ static struct nh_info info = {
 };
 
 static struct nh_hook hooks[] = {
+    {.sym = "_ZN11HtmlUtility10countWordsERK7QStringS2_S2_", .sym_new = "dtp_dictionary_count_words",
+     .lib = "libnickel.so.1.0.0", .out = &dtpa_count_words, .optional = true},
     {.sym = "_ZN19SelectionController14startSelectionEP10TapGesture", .sym_new = "dtp_longpress_start",
      .lib = "libnickel.so.1.0.0", .out = &dtpt_start, .optional = true},
 #if DTP_USE_SUDACHI
@@ -184,6 +188,8 @@ static struct nh_hook hooks[] = {
 };
 
 static struct nh_dlsym symbols[] = {
+    {.name = "_ZN19SelectionController25onInlineDefinitionResultsERK7QStringS2_RK10Dictionary",
+     .out = &dtpa_inline_results, .optional = true},
     {.name = "_ZN19HighlightingManager16surroundWithSpanER11QWebElementiiRK7QStringS4_bS4_", .out = &dtpr_partial, .optional = true},
     {.name = "_ZN19HighlightingManager14getMultiPartIdEiRK7QString", .out = &dtpr_part_id, .optional = true},
     {.name = "_ZNK10WebkitView7webViewEv", .out = &dtpj_web_view, .optional = true},

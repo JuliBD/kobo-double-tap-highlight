@@ -197,7 +197,7 @@ extern "C" __attribute__((visibility("default"))) void dtp_toggle_clear(void *co
 }
 
 namespace {
-bool allow_for(void *tap, bool native) {
+bool allow_double_tap_for_reader(void *tap, bool native) {
     if (!enabled || !gui() || !tap) return native;
     // Native TapGesture's public GestureMixin base starts at +8 on this ABI.
     // Verified by its constructor and TapGestureRecognizer::create/reset calls.
@@ -225,7 +225,7 @@ bool allow_for(void *tap, bool native) {
 }
 
 extern "C" __attribute__((visibility("default"))) void dtp_toggle_allow(void *tap, bool allow) {
-    reinterpret_cast<void (*)(void *, bool)>(dtpt_allow)(tap, allow_for(tap, allow));
+    reinterpret_cast<void (*)(void *, bool)>(dtpt_allow)(tap, allow_double_tap_for_reader(tap, allow));
 }
 
 extern "C" __attribute__((visibility("default"))) void dtp_toggle_set_current(void *menu, const void *id) {
